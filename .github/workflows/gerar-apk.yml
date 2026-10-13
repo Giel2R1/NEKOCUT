@@ -1,0 +1,144 @@
+name: NEKOCUT - APK minimo
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Android SDK
+        uses: android-actions/setup-android@v4
+      - name: SDK 35
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Montar projeto Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/java/com/nekocut/app app/src/main/res/drawable app/src/main/res/values
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = 'NEKOCUT'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.nekocut.app'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.nekocut.app'
+                  minSdk 24
+                  targetSdk 33
+                  versionCode 1
+                  versionName '0.1'
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application android:label="NEKOCUT" android:icon="@drawable/neko_icon" android:roundIcon="@drawable/neko_icon" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+              <activity android:name=".MainActivity" android:exported="true">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          EOF
+          cat > app/src/main/res/drawable/neko_icon.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+            <path android:fillColor="#101014" android:pathData="M0,0h108v108h-108z"/>
+            <path android:fillColor="#FF7410" android:pathData="M15,18 L37,33 L54,29 L71,33 L93,18 L87,69 Q77,91 54,93 Q31,91 21,69 Z"/>
+            <path android:fillColor="#101014" android:pathData="M22,32 L38,44 L54,40 L70,44 L86,32 L81,67 Q74,83 54,86 Q34,83 27,67 Z"/>
+            <path android:fillColor="#FF7410" android:pathData="M33,54 L46,59 L34,63 Z M75,54 L62,59 L74,63 Z M47,65 L69,74 L47,82 Z"/>
+          </vector>
+          EOF
+          cat > app/src/main/java/com/nekocut/app/MainActivity.java <<'EOF'
+          package com.nekocut.app;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.graphics.Color;
+          import android.view.Gravity;
+          import android.widget.ImageView;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+          import android.widget.Button;
+          public class MainActivity extends Activity {
+            private int px(int value){ return (int)(value * getResources().getDisplayMetrics().density); }
+            @Override public void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              getWindow().setStatusBarColor(Color.rgb(14,14,18));
+              getWindow().setNavigationBarColor(Color.rgb(14,14,18));
+              LinearLayout root=new LinearLayout(this);
+              root.setOrientation(LinearLayout.VERTICAL);
+              root.setGravity(Gravity.CENTER);
+              root.setPadding(px(24),px(20),px(24),px(20));
+              root.setBackgroundColor(Color.rgb(14,14,18));
+              ImageView icon=new ImageView(this);
+              icon.setImageResource(R.drawable.neko_icon);
+              root.addView(icon,new LinearLayout.LayoutParams(px(160),px(160)));
+              TextView heading=new TextView(this);
+              heading.setText("NEKOCUT");
+              heading.setTextSize(32);
+              heading.setTextColor(Color.rgb(255,116,16));
+              heading.setGravity(Gravity.CENTER);
+              root.addView(heading);
+              TextView message=new TextView(this);
+              message.setText("VERSÃO DE TESTE • abriu com sucesso!");
+              message.setTextSize(15);
+              message.setTextColor(Color.WHITE);
+              message.setGravity(Gravity.CENTER);
+              root.addView(message);
+              Button button=new Button(this);
+              button.setText("Abrir teste de editor");
+              root.addView(button);
+              button.setOnClickListener(v -> message.setText("Editor em desenvolvimento. Agora o aplicativo abre!"));
+              setContentView(root);
+            }
+          }
+          EOF
+      - name: Compilar APK
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEKOCUT-test-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
